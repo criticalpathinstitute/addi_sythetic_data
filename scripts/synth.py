@@ -6,6 +6,12 @@ Purpose: ADDI synthetic data
 """
 
 import argparse
+import csv
+import pandas as pd
+import random
+import shortuuid
+from rich.progress import track
+from pprint import pprint
 from typing import NamedTuple, TextIO
 
 
@@ -13,6 +19,7 @@ class Args(NamedTuple):
     """ Command-line arguments """
     infile: TextIO
     outfile: TextIO
+    max_records: int
 
 
 # --------------------------------------------------
@@ -36,9 +43,15 @@ def get_args() -> Args:
                         type=argparse.FileType('wt'),
                         default='out.csv')
 
+    parser.add_argument('-m',
+                        '--max',
+                        help='Maximum number of records',
+                        type=int,
+                        default=0)
+
     args = parser.parse_args()
 
-    return Args(args.file, args.outfile)
+    return Args(args.file, args.outfile, args.max)
 
 
 # --------------------------------------------------
@@ -46,7 +59,17 @@ def main() -> None:
     """ Make a jazz noise here """
 
     args = get_args()
-    print(args.infile.name)
+
+    df = pd.read_csv(args.infile)
+    writer = csv.DictWriter(args.outfile, fieldnames=df.columns)
+    writer.writeheader()
+
+    for i in track(range(args.max_records or df.shape[0])):
+        rec = {col: random.choice(df[col]) for col in df.columns}
+        rec['USUBJID'] = shortuuid.uuid()
+        writer.writerow(rec)
+
+    print(f'Done, see output in "{args.outfile.name}".')
 
 
 # --------------------------------------------------
