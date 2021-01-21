@@ -65,7 +65,7 @@ def main() -> None:
     writer.writeheader()
 
     for i in track(range(args.max_records or df.shape[0])):
-        rec = {col: random.choice(df[col]) for col in df.columns}
+        rec = {col: random.choice(df[col].fillna('')) for col in df.columns}
         rec['USUBJID'] = shortuuid.uuid()
         writer.writerow(rec)
 
