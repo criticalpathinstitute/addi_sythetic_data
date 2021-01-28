@@ -12,7 +12,7 @@ import random
 import shortuuid
 from rich.progress import track
 from pprint import pprint
-from typing import NamedTuple, TextIO
+from typing import NamedTuple, Optional, TextIO
 
 
 class Args(NamedTuple):
@@ -20,6 +20,7 @@ class Args(NamedTuple):
     infile: TextIO
     outfile: TextIO
     max_records: int
+    seed: Optional[int]
 
 
 # --------------------------------------------------
@@ -49,9 +50,15 @@ def get_args() -> Args:
                         type=int,
                         default=0)
 
+    parser.add_argument('-s',
+                        '--seed',
+                        help='Random seed value',
+                        type=int,
+                        default=None)
+
     args = parser.parse_args()
 
-    return Args(args.file, args.outfile, args.max)
+    return Args(args.file, args.outfile, args.max, args.seed)
 
 
 # --------------------------------------------------
@@ -59,17 +66,32 @@ def main() -> None:
     """ Make a jazz noise here """
 
     args = get_args()
+    random.seed(args.seed)
 
-    df = pd.read_csv(args.infile)
-    writer = csv.DictWriter(args.outfile, fieldnames=df.columns)
+    reader = csv.DictReader(args.infile)
+    # writer = csv.DictWriter(args.outfile, fieldnames=df.columns)
+    writer = csv.DictWriter(args.outfile, fieldnames=reader.fieldnames)
     writer.writeheader()
 
-    for i in track(range(args.max_records or df.shape[0])):
-        rec = {col: random.choice(df[col].fillna('')) for col in df.columns}
+    data = list(reader)
+    random.shuffle(data)
+
+    num_written = 0
+    for i, rec in enumerate(data):
+        if args.max_records and i == args.max_records:
+            break
+
         rec['USUBJID'] = shortuuid.uuid()
         writer.writerow(rec)
+        num_written += 1
 
-    print(f'Done, see output in "{args.outfile.name}".')
+    # df = pd.read_csv(args.infile)
+    # for i in track(range(args.max_records or df.shape[0])):
+    #     rec = {col: random.choice(df[col].fillna('')) for col in df.columns}
+    #     rec['USUBJID'] = shortuuid.uuid()
+    #     writer.writerow(rec)
+
+    print(f'Done, wrote {num_written:,} to "{args.outfile.name}".')
 
 
 # --------------------------------------------------
