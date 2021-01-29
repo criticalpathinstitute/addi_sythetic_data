@@ -6,13 +6,9 @@ Purpose: ADDI synthetic data
 """
 
 import argparse
-import csv
 import pandas as pd
-import random
-import shortuuid
-from rich.progress import track
-from pprint import pprint
-from typing import NamedTuple, Optional, TextIO
+from shortuuid import uuid
+from typing import List, NamedTuple, TextIO
 
 
 class Args(NamedTuple):
@@ -20,7 +16,7 @@ class Args(NamedTuple):
     infile: TextIO
     outfile: TextIO
     max_records: int
-    seed: Optional[int]
+    exclude: List[str]
 
 
 # --------------------------------------------------
@@ -50,15 +46,16 @@ def get_args() -> Args:
                         type=int,
                         default=0)
 
-    parser.add_argument('-s',
-                        '--seed',
-                        help='Random seed value',
-                        type=int,
-                        default=None)
+    parser.add_argument('-x',
+                        '--exclude',
+                        help='Exclude fields',
+                        type=str,
+                        nargs='+',
+                        default=['CMGRPID', 'CMSPID', 'CMLNKID'])
 
     args = parser.parse_args()
 
-    return Args(args.file, args.outfile, args.max, args.seed)
+    return Args(args.file, args.outfile, args.max, args.exclude)
 
 
 # --------------------------------------------------
@@ -66,32 +63,26 @@ def main() -> None:
     """ Make a jazz noise here """
 
     args = get_args()
-    random.seed(args.seed)
 
-    reader = csv.DictReader(args.infile)
-    # writer = csv.DictWriter(args.outfile, fieldnames=df.columns)
-    writer = csv.DictWriter(args.outfile, fieldnames=reader.fieldnames)
-    writer.writeheader()
+    # "low_memory" keeps Pandas quiet on mixed datatypes
+    df = pd.read_csv(args.infile, low_memory=False)
 
-    data = list(reader)
-    random.shuffle(data)
+    # Drop unwanted/empty columns
+    drop = set(args.exclude +
+               [col for col in df.columns if df[col].isnull().all()])
+    df.drop(columns=drop, inplace=True)
 
-    num_written = 0
-    for i, rec in enumerate(data):
-        if args.max_records and i == args.max_records:
-            break
+    # Generate random values for subject ID
+    nrows = df.shape[0]
+    df['USUBJID'] = [uuid() for _ in range(nrows)]
 
-        rec['USUBJID'] = shortuuid.uuid()
-        writer.writerow(rec)
-        num_written += 1
+    # Sample or not
+    data = df.sample(args.max_records) if args.max_records else df
 
-    # df = pd.read_csv(args.infile)
-    # for i in track(range(args.max_records or df.shape[0])):
-    #     rec = {col: random.choice(df[col].fillna('')) for col in df.columns}
-    #     rec['USUBJID'] = shortuuid.uuid()
-    #     writer.writerow(rec)
+    # Write output
+    data.to_csv(args.outfile, index=False)
 
-    print(f'Done, wrote {num_written:,} to "{args.outfile.name}".')
+    print(f'Done, wrote {data.shape[0]:,} to "{args.outfile.name}".')
 
 
 # --------------------------------------------------
